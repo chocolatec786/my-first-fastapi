@@ -4,5 +4,5 @@ sqlalchemy
 pydantic
 python-multipart
 cloudinary
-python-jose[cryptography]     # ← 新增：用來產生 JWT
-passlib[bcrypt]               # ← 新增：密碼加密
+python-jose[cryptography]
+bcrypt
