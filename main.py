@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.middleware.cors import CORSMiddleware   # ← 新增這一行
+from fastapi.middleware.cors import CORSMiddleware   # ← CORS
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
@@ -17,10 +17,10 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="完整版 FastAPI + React 前端")
 
-# ===================== CORS 設定（解決前端問題） =====================
+# ===================== CORS 加強版（解決 React localhost 問題） =====================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://grateful-bravery.up.railway.app"],  # 允許 React 本地開發
+    allow_origins=["*"],                    # 開發階段允許所有來源（最簡單）
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -150,4 +150,4 @@ async def upload_image(item_id: int, file: UploadFile = File(...), db: Session =
     db.refresh(item)
     return item
 
-print("✅ 完整版伺服器已啟動（已開啟 CORS）")
+print("✅ 完整版伺服器已啟動（CORS 已開啟）")
