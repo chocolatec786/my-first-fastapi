@@ -2,4 +2,5 @@ fastapi
 uvicorn[standard]
 sqlalchemy
 pydantic
-python-multipart     # ← 新增這一行
+python-multipart
+cloudinary          # ← 新增這一行
