@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.middleware.cors import CORSMiddleware   # ← 新增這一行
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
@@ -14,9 +15,18 @@ from models import Base, engine, SessionLocal, User, Item
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="完整版 FastAPI - 登入 + JWT + Item CRUD + 雲端圖片")
+app = FastAPI(title="完整版 FastAPI + React 前端")
 
-# ===================== 設定 =====================
+# ===================== CORS 設定（解決前端問題） =====================
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "https://grateful-bravery.up.railway.app"],  # 允許 React 本地開發
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ===================== 其他設定 =====================
 SECRET_KEY = "super-secret-key-please-change-this-in-production-1234567890abcdef"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
@@ -111,7 +121,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
 
-# ===================== 受保護的路由 =====================
+# ===================== 受保護路由 =====================
 @app.get("/protected")
 async def protected_route(current_user: User = Depends(get_current_user)):
     return {"message": f"你好 {current_user.username}！這是受保護的 API"}
@@ -130,19 +140,14 @@ async def create_item(item: ItemCreate, db: Session = Depends(get_db)):
     return db_item
 
 @app.post("/items/{item_id}/upload", response_model=ItemResponse)
-async def upload_image(
-    item_id: int,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db)
-):
+async def upload_image(item_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
     item = db.query(Item).filter(Item.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
-    
     result = cloudinary.uploader.upload(file.file)
     item.image_url = result["secure_url"]
     db.commit()
     db.refresh(item)
     return item
 
-print("✅ 完整版伺服器已啟動 - 所有功能都已載入")
+print("✅ 完整版伺服器已啟動（已開啟 CORS）")
