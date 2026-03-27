@@ -14,7 +14,7 @@ from models import Base, engine, SessionLocal, User, Item
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="完整版 CRUD + 登入 + JWT + 雲端圖片")
+app = FastAPI(title="完整版 FastAPI - 登入 + JWT + Item CRUD + 雲端圖片")
 
 # ===================== 設定 =====================
 SECRET_KEY = "super-secret-key-please-change-this-in-production-1234567890abcdef"
@@ -77,7 +77,6 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -146,4 +145,4 @@ async def upload_image(
     db.refresh(item)
     return item
 
-print("✅ 完整版伺服器已啟動")
+print("✅ 完整版伺服器已啟動 - 所有功能都已載入")
