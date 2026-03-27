@@ -1,2 +1,4 @@
 fastapi
-hypercorn
+uvicorn[standard]
+sqlalchemy
+pydantic
