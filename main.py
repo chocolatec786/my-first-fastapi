@@ -17,7 +17,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="我的 CRUD API（登入 + JWT）")
 
 # ===================== 設定 =====================
-SECRET_KEY = "my-super-secret-key-please-change-this-to-a-very-long-random-string-123456789"   # 之後請改成更安全的金鑰
+SECRET_KEY = "super-secret-key-please-change-this-in-production-1234567890abcdef"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
