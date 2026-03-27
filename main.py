@@ -20,7 +20,7 @@ app = FastAPI(title="完整版 FastAPI + React 前端")
 # ===================== CORS 強制設定（放在最前面） =====================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://grateful-bravery.up.railway.app", "*"],
+    allow_origins=["http://localhost:3000", "https://my-first-fastapi-production.up.railway.app", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,7 +48,7 @@ def get_db():
     finally:
         db.close()
 
-# ===================== 模型 =====================
+# ===================== 模型 ===================== schema 
 class UserCreate(BaseModel):
     username: str
     password: str
