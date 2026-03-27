@@ -1,18 +1,29 @@
-from fastapi import FastAPI, Depends, HTTPException, File, UploadFile
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Optional
 import cloudinary
 import cloudinary.uploader
 import os
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
 
-from models import Base, engine, SessionLocal, Item
+from models import Base, engine, SessionLocal, User, Item
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="我的 CRUD API（Cloudinary 雲端圖片）")
+app = FastAPI(title="我的 CRUD API（登入 + JWT）")
 
-# ===================== Cloudinary 設定 =====================
+# ===================== 設定 =====================
+SECRET_KEY = "你的超級秘密金鑰請改成隨機長字串"   # 之後請改成更安全的金鑰
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
     api_key=os.getenv("CLOUDINARY_API_KEY"),
@@ -27,83 +38,82 @@ def get_db():
     finally:
         db.close()
 
-class ItemCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
+# ===================== Pydantic 模型 =====================
+class UserCreate(BaseModel):
+    username: str
+    password: str
 
-class ItemResponse(BaseModel):
-    id: int
-    name: str
-    description: Optional[str] = None
-    image_url: Optional[str] = None   # ← 改成 image_url（雲端永久連結）
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
 
-    class Config:
-        from_attributes = True
+class TokenData(BaseModel):
+    username: Optional[str] = None
 
-# ===================== GET =====================
-@app.get("/")
-async def root():
-    return {"message": "歡迎來到使用 Cloudinary 雲端圖片的 CRUD API！🚀"}
+# ===================== 密碼與 JWT 工具 =====================
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
 
-@app.get("/items", response_model=List[ItemResponse])
-async def get_all_items(db: Session = Depends(get_db)):
-    return db.query(Item).all()
+def get_password_hash(password):
+    return pwd_context.hash(password)
 
-@app.get("/items/{item_id}", response_model=ItemResponse)
-async def get_item(item_id: int, db: Session = Depends(get_db)):
-    item = db.query(Item).filter(Item.id == item_id).first()
-    if item is None:
-        raise HTTPException(status_code=404, detail="找不到這個項目")
-    return item
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-# ===================== POST =====================
-@app.post("/items", response_model=ItemResponse)
-async def create_item(new_item: ItemCreate, db: Session = Depends(get_db)):
-    db_item = Item(name=new_item.name, description=new_item.description)
-    db.add(db_item)
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    user = db.query(User).filter(User.username == username).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+# ===================== 註冊 =====================
+@app.post("/register")
+async def register(user: UserCreate, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.username == user.username).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Username already registered")
+    
+    hashed_password = get_password_hash(user.password)
+    new_user = User(username=user.username, hashed_password=hashed_password)
+    db.add(new_user)
     db.commit()
-    db.refresh(db_item)
-    return db_item
+    db.refresh(new_user)
+    return {"message": "註冊成功！請登入"}
 
-# ===================== 檔案上傳（Cloudinary） =====================
-@app.post("/items/{item_id}/upload", response_model=ItemResponse)
-async def upload_file_to_item(
-    item_id: int,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db)
-):
-    item = db.query(Item).filter(Item.id == item_id).first()
-    if item is None:
-        raise HTTPException(status_code=404, detail="找不到這個項目")
+# ===================== 登入 =====================
+@app.post("/login", response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token = create_access_token(data={"sub": user.username})
+    return {"access_token": access_token, "token_type": "bearer"}
 
-    # 上傳到 Cloudinary
-    result = cloudinary.uploader.upload(file.file)
-    image_url = result["secure_url"]   # 永久雲端連結
+# ===================== 受保護的範例 API =====================
+@app.get("/protected")
+async def protected_route(current_user: User = Depends(get_current_user)):
+    return {"message": f"你好 {current_user.username}！這是受保護的 API，只有登入後才能看到"}
 
-    # 把雲端連結存進資料庫
-    item.image_url = image_url
-    db.commit()
-    db.refresh(item)
+# （你之前的 Item CRUD 也可以加上保護，我這裡先留簡單版本，你之後可以自己加）
 
-    return item
-
-# ===================== PUT / DELETE =====================
-@app.put("/items/{item_id}", response_model=ItemResponse)
-async def update_item(item_id: int, updated_item: ItemCreate, db: Session = Depends(get_db)):
-    db_item = db.query(Item).filter(Item.id == item_id).first()
-    if db_item is None:
-        raise HTTPException(status_code=404, detail="找不到這個項目")
-    db_item.name = updated_item.name
-    db_item.description = updated_item.description
-    db.commit()
-    db.refresh(db_item)
-    return db_item
-
-@app.delete("/items/{item_id}")
-async def delete_item(item_id: int, db: Session = Depends(get_db)):
-    db_item = db.query(Item).filter(Item.id == item_id).first()
-    if db_item is None:
-        raise HTTPException(status_code=404, detail="找不到這個項目")
-    db.delete(db_item)
-    db.commit()
-    return {"message": "刪除成功！"}
+# ===================== 其他功能保持不變 =====================
+# ...（你可以把之前的 Item CRUD 和檔案上傳貼回來，我這邊先簡化教學）

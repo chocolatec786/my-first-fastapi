@@ -3,4 +3,6 @@ uvicorn[standard]
 sqlalchemy
 pydantic
 python-multipart
-cloudinary          # ← 新增這一行
+cloudinary
+python-jose[cryptography]     # ← 新增：用來產生 JWT
+passlib[bcrypt]               # ← 新增：密碼加密
