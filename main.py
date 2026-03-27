@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.middleware.cors import CORSMiddleware   # ← CORS
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
@@ -17,13 +17,14 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="完整版 FastAPI + React 前端")
 
-# ===================== CORS 加強版（解決 React localhost 問題） =====================
+# ===================== CORS 強制設定（放在最前面） =====================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],                    # 開發階段允許所有來源（最簡單）
+    allow_origins=["http://localhost:3000", "https://grateful-bravery.up.railway.app", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # ===================== 其他設定 =====================
@@ -126,28 +127,4 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
 async def protected_route(current_user: User = Depends(get_current_user)):
     return {"message": f"你好 {current_user.username}！這是受保護的 API"}
 
-# ===================== Item CRUD =====================
-@app.get("/items", response_model=List[ItemResponse])
-async def get_all_items(db: Session = Depends(get_db)):
-    return db.query(Item).all()
-
-@app.post("/items", response_model=ItemResponse)
-async def create_item(item: ItemCreate, db: Session = Depends(get_db)):
-    db_item = Item(name=item.name, description=item.description)
-    db.add(db_item)
-    db.commit()
-    db.refresh(db_item)
-    return db_item
-
-@app.post("/items/{item_id}/upload", response_model=ItemResponse)
-async def upload_image(item_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
-    item = db.query(Item).filter(Item.id == item_id).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Item not found")
-    result = cloudinary.uploader.upload(file.file)
-    item.image_url = result["secure_url"]
-    db.commit()
-    db.refresh(item)
-    return item
-
-print("✅ 完整版伺服器已啟動（CORS 已開啟）")
+print("✅ 完整版伺服器已啟動（CORS 已強制開啟）")
